@@ -1,10 +1,10 @@
 import * as React from 'react';
-import { supabase, type Configuracao } from '@/lib/supabase';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card.tsx';
-import { Input } from '@/components/ui/input.tsx';
-import { Label } from '@/components/ui/label.tsx';
-import { Button } from '@/components/ui/button.tsx';
-import { Slider } from '@/components/ui/slider.tsx';
+import { supabase, type Configuracao } from '../lib/supabase.ts';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from './ui/card.tsx';
+import { Input } from './ui/input.tsx';
+import { Label } from './ui/label.tsx';
+import { Button } from './ui/button.tsx';
+import { Slider } from './ui/slider.tsx';
 import { Settings, Save, Wifi, Database, Info, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 

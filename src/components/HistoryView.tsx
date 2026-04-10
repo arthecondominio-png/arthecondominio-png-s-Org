@@ -1,8 +1,8 @@
 import * as React from 'react';
-import { supabase, type NivelLeitura } from '@/lib/supabase';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card.tsx';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table.tsx';
-import { Badge } from '@/components/ui/badge.tsx';
+import { supabase, type NivelLeitura } from '../lib/supabase.ts';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card.tsx';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table.tsx';
+import { Badge } from './ui/badge.tsx';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Area, AreaChart } from 'recharts';
 import { History, Filter, Download, Calendar } from 'lucide-react';
 import { format } from 'date-fns';

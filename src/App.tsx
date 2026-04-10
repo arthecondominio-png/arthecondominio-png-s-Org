@@ -4,10 +4,10 @@
  */
 
 import * as React from 'react';
-import { Dashboard } from '@/components/Dashboard';
-import { HistoryView } from '@/components/HistoryView';
-import { SettingsView } from '@/components/SettingsView';
-import { Toaster } from '@/components/ui/sonner.tsx';
+import { Dashboard } from './components/Dashboard.tsx';
+import { HistoryView } from './components/HistoryView.tsx';
+import { SettingsView } from './components/SettingsView.tsx';
+import { Toaster } from './components/ui/sonner.tsx';
 import { LayoutDashboard, History, Settings, Droplets, Menu, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 

@@ -1,7 +1,7 @@
 import * as React from 'react';
-import { supabase, type NivelLeitura, type Configuracao } from '@/lib/supabase';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card.tsx';
-import { Badge } from '@/components/ui/badge.tsx';
+import { supabase, type NivelLeitura, type Configuracao } from '../lib/supabase.ts';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card.tsx';
+import { Badge } from './ui/badge.tsx';
 import { Droplets, AlertTriangle, CheckCircle2, Info, ArrowUp, ArrowDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
