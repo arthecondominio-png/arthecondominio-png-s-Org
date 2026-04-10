@@ -4,8 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table.tsx';
 import { Badge } from './ui/badge.tsx';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Area, AreaChart } from 'recharts';
-import { History, Filter, Download, Calendar } from 'lucide-react';
-import { format } from 'date-fns';
+import { History, Filter, Download, Calendar, Zap, Clock, Activity, TrendingUp } from 'lucide-react';
+import { format, differenceInMinutes, startOfDay, isSameDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 
@@ -73,6 +73,80 @@ export const HistoryView: React.FC = () => {
       default: return <Badge variant="secondary">{status}</Badge>;
     }
   };
+
+  const pumpAnalysis = React.useMemo(() => {
+    if (history.length < 2) return null;
+
+    // Sort ascending for analysis
+    const sorted = [...history].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    
+    // We'll analyze 'caixa_01' (Superior) as the primary target for pump filling
+    // but we could analyze both. Let's focus on where the pump usually acts.
+    const readings = sorted.filter(r => r.device_id === 'caixa_01');
+    
+    const events: { start: Date, end: Date, startLevel: number, endLevel: number, duration: number }[] = [];
+    let currentEvent: any = null;
+
+    for (let i = 1; i < readings.length; i++) {
+      const prev = readings[i-1];
+      const curr = readings[i];
+      const levelDiff = curr.percentual - prev.percentual;
+      const timeDiff = differenceInMinutes(new Date(curr.created_at), new Date(prev.created_at));
+
+      // If level increased significantly (more than 2% between readings)
+      // and time between readings is reasonable (less than 60 mins to avoid gaps)
+      if (levelDiff > 1 && timeDiff < 60) {
+        if (!currentEvent) {
+          currentEvent = {
+            start: new Date(prev.created_at),
+            startLevel: prev.percentual,
+            end: new Date(curr.created_at),
+            endLevel: curr.percentual
+          };
+        } else {
+          currentEvent.end = new Date(curr.created_at);
+          currentEvent.endLevel = curr.percentual;
+        }
+      } else {
+        if (currentEvent) {
+          // Only count as a pump event if total increase was > 10%
+          if (currentEvent.endLevel - currentEvent.startLevel > 10) {
+            currentEvent.duration = differenceInMinutes(currentEvent.end, currentEvent.start);
+            events.push(currentEvent);
+          }
+          currentEvent = null;
+        }
+      }
+    }
+
+    // Handle last event if it was still rising
+    if (currentEvent && currentEvent.endLevel - currentEvent.startLevel > 10) {
+      currentEvent.duration = differenceInMinutes(currentEvent.end, currentEvent.start);
+      events.push(currentEvent);
+    }
+
+    const totalActivations = events.length;
+    const avgDuration = totalActivations > 0 
+      ? events.reduce((acc, e) => acc + e.duration, 0) / totalActivations 
+      : 0;
+
+    // Group by day to find pattern
+    const days: { [key: string]: number } = {};
+    events.forEach(e => {
+      const dayKey = format(e.start, 'yyyy-MM-dd');
+      days[dayKey] = (days[dayKey] || 0) + 1;
+    });
+
+    const dayCount = Object.keys(days).length || 1;
+    const avgPerDay = totalActivations / dayCount;
+
+    return {
+      events: events.reverse(), // Show newest first
+      totalActivations,
+      avgDuration: Math.round(avgDuration),
+      avgPerDay: avgPerDay.toFixed(1)
+    };
+  }, [history]);
 
   return (
     <div className="space-y-6">
@@ -171,6 +245,106 @@ export const HistoryView: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Pump Analysis Section */}
+      {pumpAnalysis && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="border-none shadow-md bg-white/80 backdrop-blur-sm">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Acionamentos</p>
+                  <h3 className="text-2xl font-black text-slate-800 mt-1">{pumpAnalysis.totalActivations}</h3>
+                </div>
+                <div className="p-3 bg-blue-100 rounded-2xl text-blue-600">
+                  <Zap className="w-6 h-6" />
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-500 mt-2 font-medium">Total no período selecionado</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-none shadow-md bg-white/80 backdrop-blur-sm">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Tempo Médio</p>
+                  <h3 className="text-2xl font-black text-slate-800 mt-1">{pumpAnalysis.avgDuration} min</h3>
+                </div>
+                <div className="p-3 bg-indigo-100 rounded-2xl text-indigo-600">
+                  <Clock className="w-6 h-6" />
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-500 mt-2 font-medium">Duração média de enchimento</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-none shadow-md bg-white/80 backdrop-blur-sm">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Frequência</p>
+                  <h3 className="text-2xl font-black text-slate-800 mt-1">{pumpAnalysis.avgPerDay} / dia</h3>
+                </div>
+                <div className="p-3 bg-emerald-100 rounded-2xl text-emerald-600">
+                  <Activity className="w-6 h-6" />
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-500 mt-2 font-medium">Média de acionamentos diários</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {pumpAnalysis && pumpAnalysis.events.length > 0 && (
+        <Card className="border-none shadow-lg bg-white/50 backdrop-blur-sm overflow-hidden">
+          <CardHeader>
+            <CardTitle className="text-lg font-bold flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-blue-500" />
+              Padrões de Enchimento Detectados
+            </CardTitle>
+            <CardDescription>Identificação automática de ciclos da bomba</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader className="bg-slate-50/50">
+                  <TableRow>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest">Início</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest">Fim</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest">Duração</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest">Variação</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest">Eficiência</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pumpAnalysis.events.slice(0, 10).map((event, idx) => (
+                    <TableRow key={idx} className="hover:bg-slate-50/80 transition-colors">
+                      <TableCell className="text-xs font-medium text-slate-600">
+                        {format(event.start, 'dd/MM HH:mm')}
+                      </TableCell>
+                      <TableCell className="text-xs font-medium text-slate-600">
+                        {format(event.end, 'dd/MM HH:mm')}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="text-[10px] font-bold">
+                          {event.duration} min
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs font-bold text-blue-600">
+                        +{Math.round(event.endLevel - event.startLevel)}%
+                      </TableCell>
+                      <TableCell className="text-xs font-medium text-slate-500">
+                        {((event.endLevel - event.startLevel) / (event.duration || 1)).toFixed(1)}% / min
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Table */}
       <Card className="border-none shadow-lg bg-white/50 backdrop-blur-sm overflow-hidden">

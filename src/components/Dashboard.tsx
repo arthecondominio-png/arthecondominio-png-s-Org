@@ -2,8 +2,9 @@ import * as React from 'react';
 import { supabase, type NivelLeitura, type Configuracao } from '../lib/supabase.ts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card.tsx';
 import { Badge } from './ui/badge.tsx';
-import { Droplets, AlertTriangle, CheckCircle2, Info, ArrowUp, ArrowDown } from 'lucide-react';
+import { Droplets, AlertTriangle, CheckCircle2, Info, ArrowUp, ArrowDown, Zap, Activity, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { differenceInMinutes } from 'date-fns';
 import { toast } from 'sonner';
 
 interface TankCardProps {
@@ -127,6 +128,7 @@ const TankCard: React.FC<TankCardProps> = ({ title, deviceId, config, latestRead
 
 export const Dashboard: React.FC = () => {
   const [readings, setReadings] = React.useState<NivelLeitura[]>([]);
+  const [allReadings, setAllReadings] = React.useState<NivelLeitura[]>([]); // For anomaly detection
   const [configs, setConfigs] = React.useState<Configuracao[]>([]);
   const [loading, setLoading] = React.useState(true);
 
@@ -135,18 +137,105 @@ export const Dashboard: React.FC = () => {
   const superiorConfig = configs.find(c => c.id === 'superior') || null;
   const inferiorConfig = configs.find(c => c.id === 'inferior') || null;
 
+  const anomalyStatus = React.useMemo(() => {
+    if (allReadings.length < 10) return null;
+
+    const superiorHistory = allReadings
+      .filter(r => r.device_id === 'caixa_01')
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+    if (superiorHistory.length < 5) return null;
+
+    // 1. Detect if pump is currently running
+    const last = superiorHistory[superiorHistory.length - 1];
+    const prev = superiorHistory[superiorHistory.length - 2];
+    const isRising = last.percentual > prev.percentual + 0.5;
+
+    // 2. Calculate baseline from history (last 24h or available)
+    const events: number[] = [];
+    let start: Date | null = null;
+    let startLvl = 0;
+
+    for (let i = 1; i < superiorHistory.length; i++) {
+      const p = superiorHistory[i-1];
+      const c = superiorHistory[i];
+      if (c.percentual > p.percentual + 1) {
+        if (!start) {
+          start = new Date(p.created_at);
+          startLvl = p.percentual;
+        }
+      } else if (start) {
+        if (p.percentual - startLvl > 10) {
+          events.push(differenceInMinutes(new Date(p.created_at), start));
+        }
+        start = null;
+      }
+    }
+
+    const avgDuration = events.length > 0 ? events.reduce((a, b) => a + b, 0) / events.length : 20; // fallback 20m
+    const maxNormalDuration = avgDuration * 1.5 + 5; // 50% margin
+
+    // 3. Check current run duration if rising
+    let currentRunDuration = 0;
+    if (isRising) {
+      let runStart = new Date(last.created_at);
+      for (let i = superiorHistory.length - 2; i >= 0; i--) {
+        if (superiorHistory[i+1].percentual > superiorHistory[i].percentual + 0.2) {
+          runStart = new Date(superiorHistory[i].created_at);
+        } else {
+          break;
+        }
+      }
+      currentRunDuration = differenceInMinutes(new Date(last.created_at), runStart);
+    }
+
+    // 4. Frequency check (last 3 hours)
+    const threeHoursAgo = new Date();
+    threeHoursAgo.setHours(threeHoursAgo.getHours() - 3);
+    const recentActivations = events.length; // This is simplified, ideally we'd filter events by time
+    
+    const anomalies = [];
+    if (isRising && currentRunDuration > maxNormalDuration) {
+      anomalies.push({
+        type: 'DURATION',
+        message: `Bomba ligada há ${currentRunDuration} min (Padrão: ~${Math.round(avgDuration)} min). Possível falha no desligamento ou vazamento crítico.`,
+        severity: 'high'
+      });
+    }
+
+    // Check for "cycling" (too many starts) - simplified logic
+    const recentReadings = superiorHistory.filter(r => new Date(r.created_at) > threeHoursAgo);
+    let starts = 0;
+    for(let i=1; i<recentReadings.length; i++) {
+      if (recentReadings[i].percentual > recentReadings[i-1].percentual + 5) starts++;
+    }
+    
+    if (starts > 4) {
+      anomalies.push({
+        type: 'FREQUENCY',
+        message: `Alta frequência de acionamentos (${starts} vezes nas últimas 3h). Verifique se há vazamentos ou boia oscilando.`,
+        severity: 'medium'
+      });
+    }
+
+    return anomalies;
+  }, [allReadings]);
+
   React.useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch latest readings for each device
+        // Fetch last 100 readings for analysis
         const { data: latestReadings, error: readingsError } = await supabase
           .from('nivel_caixa')
           .select('*')
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .limit(100);
 
         if (readingsError) throw readingsError;
 
-        // Group by device_id and take the first one
+        setAllReadings(latestReadings || []);
+
+        // Group by device_id and take the first one for current status
         const uniqueReadings = latestReadings?.reduce((acc: NivelLeitura[], current) => {
           const x = acc.find(item => item.device_id === current.device_id);
           if (!x) return acc.concat([current]);
@@ -189,6 +278,8 @@ export const Dashboard: React.FC = () => {
             const filtered = prev.filter(r => r.device_id !== newReading.device_id);
             return [newReading, ...filtered];
           });
+          
+          setAllReadings(prev => [newReading, ...prev].slice(0, 100));
           
           // Show alert if status is critical or high
           if (newReading.status === 'CRITICO') {
@@ -243,6 +334,43 @@ export const Dashboard: React.FC = () => {
           latestReading={inferiorReading}
         />
       </div>
+
+      {/* Anomaly Alerts */}
+      <AnimatePresence>
+        {anomalyStatus && anomalyStatus.length > 0 && (
+          <div className="space-y-3">
+            {anomalyStatus.map((anomaly, idx) => (
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                className={`p-4 rounded-2xl border flex items-start gap-4 shadow-sm ${
+                  anomaly.severity === 'high' 
+                    ? 'bg-red-50 border-red-100 text-red-800' 
+                    : 'bg-amber-50 border-amber-100 text-amber-800'
+                }`}
+              >
+                <div className={`p-2 rounded-xl ${
+                  anomaly.severity === 'high' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'
+                }`}>
+                  {anomaly.type === 'DURATION' ? <Clock className="w-5 h-5" /> : <Activity className="w-5 h-5" />}
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-sm font-black uppercase tracking-tight">
+                    {anomaly.severity === 'high' ? 'Anomalia Crítica Detectada' : 'Aviso de Padrão Incomum'}
+                  </h4>
+                  <p className="text-sm font-medium mt-1 opacity-90">{anomaly.message}</p>
+                </div>
+                <div className="flex items-center gap-1 px-2 py-1 bg-white/50 rounded-lg text-[10px] font-black uppercase">
+                  <Zap className="w-3 h-3" />
+                  Smart AI
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Quick Summary / Alerts */}
       <Card className="border-none shadow-md bg-white/50 backdrop-blur-sm">
