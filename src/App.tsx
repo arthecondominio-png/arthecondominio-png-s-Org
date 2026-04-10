@@ -7,7 +7,7 @@ import * as React from 'react';
 import { Dashboard } from '@/components/Dashboard';
 import { HistoryView } from '@/components/HistoryView';
 import { SettingsView } from '@/components/SettingsView';
-import { Toaster } from '@/components/ui/sonner';
+import { Toaster } from '@/components/ui/sonner.tsx';
 import { LayoutDashboard, History, Settings, Droplets, Menu, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
