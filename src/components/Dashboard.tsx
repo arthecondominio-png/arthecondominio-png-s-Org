@@ -2,9 +2,10 @@ import * as React from 'react';
 import { supabase, type NivelLeitura, type Configuracao } from '../lib/supabase.ts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card.tsx';
 import { Badge } from './ui/badge.tsx';
-import { Droplets, AlertTriangle, CheckCircle2, Info, ArrowUp, ArrowDown, Zap, Activity, Clock } from 'lucide-react';
+import { Droplets, AlertTriangle, CheckCircle2, Info, ArrowUp, ArrowDown, Zap, Activity, Clock, WifiOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { differenceInMinutes } from 'date-fns';
+import { differenceInMinutes, formatDistanceToNow } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 
 interface TankCardProps {
@@ -15,10 +16,23 @@ interface TankCardProps {
 }
 
 const TankCard: React.FC<TankCardProps> = ({ title, deviceId, config, latestReading }) => {
+  const [now, setNow] = React.useState(new Date());
+  
+  // Update 'now' every minute to refresh offline status
+  React.useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
   const percent = latestReading?.percentual ?? 0;
   const status = latestReading?.status ?? 'DESCONHECIDO';
   
-  const getStatusColor = (status: string) => {
+  const lastUpdate = latestReading ? new Date(latestReading.created_at) : null;
+  const minutesSinceLastUpdate = lastUpdate ? differenceInMinutes(now, lastUpdate) : Infinity;
+  const isOffline = minutesSinceLastUpdate > 5;
+
+  const getStatusColor = (status: string, offline: boolean) => {
+    if (offline) return 'bg-slate-500 text-white';
     switch (status) {
       case 'CRITICO': return 'bg-red-500 text-white';
       case 'BAIXO': return 'bg-orange-500 text-white';
@@ -46,12 +60,12 @@ const TankCard: React.FC<TankCardProps> = ({ title, deviceId, config, latestRead
               ID: {deviceId}
             </CardDescription>
           </div>
-          <Badge className={getStatusColor(status)}>
-            {status}
+          <Badge className={getStatusColor(status, isOffline)}>
+            {isOffline ? 'OFFLINE' : status}
           </Badge>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className={isOffline ? 'opacity-60 grayscale-[0.5]' : ''}>
         <div className="flex gap-6 items-center">
           {/* Tank Visualization */}
           <div className="relative w-24 h-48 bg-slate-100 rounded-xl border-4 border-slate-200 overflow-hidden shadow-inner">
@@ -94,11 +108,24 @@ const TankCard: React.FC<TankCardProps> = ({ title, deviceId, config, latestRead
               </div>
               <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase">
                 <span>Última Atualização</span>
-                <span>{latestReading ? new Date(latestReading.created_at).toLocaleTimeString() : '--'}</span>
+                <span className={isOffline ? 'text-red-500 font-black' : ''}>
+                  {latestReading ? formatDistanceToNow(new Date(latestReading.created_at), { addSuffix: true, locale: ptBR }) : '--'}
+                </span>
               </div>
             </div>
 
-            {status === 'CRITICO' && (
+            {isOffline && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="flex items-center gap-2 p-2 bg-slate-100 text-slate-700 rounded-md border border-slate-200 text-xs font-bold"
+              >
+                <WifiOff className="w-4 h-4 text-slate-500" />
+                Placa desconectada!
+              </motion.div>
+            )}
+
+            {!isOffline && status === 'CRITICO' && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -364,7 +391,7 @@ export const Dashboard: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-1 px-2 py-1 bg-white/50 rounded-lg text-[10px] font-black uppercase">
                   <Zap className="w-3 h-3" />
-                  Smart AI
+                  IA Arthe
                 </div>
               </motion.div>
             ))}

@@ -13,6 +13,7 @@ export const HistoryView: React.FC = () => {
   const [history, setHistory] = React.useState<NivelLeitura[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [timeRange, setTimeRange] = React.useState<'24h' | '7d' | '30d'>('24h');
+  const [deviceFilter, setDeviceFilter] = React.useState<'todos' | 'superior' | 'inferior'>('todos');
 
   React.useEffect(() => {
     const fetchHistory = async () => {
@@ -50,8 +51,14 @@ export const HistoryView: React.FC = () => {
 
   const chartData = React.useMemo(() => {
     // Group readings by time for the chart
-    // For 24h, we can show more detail
-    const sorted = [...history].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    const filteredHistory = history.filter(r => {
+      if (deviceFilter === 'todos') return true;
+      if (deviceFilter === 'superior') return r.device_id === 'caixa_01';
+      if (deviceFilter === 'inferior') return r.device_id === 'caixa_02';
+      return true;
+    });
+
+    const sorted = [...filteredHistory].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
     
     return sorted.map(r => ({
       time: format(new Date(r.created_at), 'HH:mm'),
@@ -61,7 +68,7 @@ export const HistoryView: React.FC = () => {
       superior: r.device_id === 'caixa_01' ? r.percentual : null,
       inferior: r.device_id === 'caixa_02' ? r.percentual : null,
     }));
-  }, [history]);
+  }, [history, deviceFilter]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -80,9 +87,13 @@ export const HistoryView: React.FC = () => {
     // Sort ascending for analysis
     const sorted = [...history].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
     
-    // We'll analyze 'caixa_01' (Superior) as the primary target for pump filling
-    // but we could analyze both. Let's focus on where the pump usually acts.
-    const readings = sorted.filter(r => r.device_id === 'caixa_01');
+    // Analyze based on filter or both
+    const readings = sorted.filter(r => {
+      if (deviceFilter === 'todos') return r.device_id === 'caixa_01'; // Default to superior for general analysis
+      if (deviceFilter === 'superior') return r.device_id === 'caixa_01';
+      if (deviceFilter === 'inferior') return r.device_id === 'caixa_02';
+      return false;
+    });
     
     const events: { start: Date, end: Date, startLevel: number, endLevel: number, duration: number }[] = [];
     let currentEvent: any = null;
@@ -161,7 +172,22 @@ export const HistoryView: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-lg self-start sm:self-center">
+        <div className="flex flex-wrap items-center gap-2 bg-slate-100 p-1 rounded-lg self-start sm:self-center">
+          <div className="flex items-center gap-1 mr-2 px-2 border-r border-slate-200">
+            {(['todos', 'superior', 'inferior'] as const).map((dev) => (
+              <button
+                key={dev}
+                onClick={() => setDeviceFilter(dev)}
+                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${
+                  deviceFilter === dev 
+                    ? 'bg-white text-indigo-600 shadow-sm' 
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                {dev === 'todos' ? 'Todos' : dev === 'superior' ? 'Superior' : 'Inferior'}
+              </button>
+            ))}
+          </div>
           {(['24h', '7d', '30d'] as const).map((range) => (
             <button
               key={range}
@@ -371,7 +397,14 @@ export const HistoryView: React.FC = () => {
               </TableHeader>
               <TableBody>
                 {history.length > 0 ? (
-                  history.slice(0, 50).map((row) => (
+                  history
+                    .filter(r => {
+                      if (deviceFilter === 'todos') return true;
+                      if (deviceFilter === 'superior') return r.device_id === 'caixa_01';
+                      if (deviceFilter === 'inferior') return r.device_id === 'caixa_02';
+                      return true;
+                    })
+                    .slice(0, 50).map((row) => (
                     <TableRow key={row.id} className="hover:bg-slate-50/80 transition-colors">
                       <TableCell className="text-xs font-medium text-slate-600">
                         {format(new Date(row.created_at), 'dd/MM/yyyy HH:mm:ss')}

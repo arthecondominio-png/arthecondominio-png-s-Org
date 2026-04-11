@@ -83,7 +83,7 @@ export const SettingsView: React.FC = () => {
         {configs.map((config) => (
           <Card key={config.id} className="border-none shadow-lg bg-white/50 backdrop-blur-sm">
             <CardHeader>
-              <CardTitle className="text-lg font-bold capitalize">Reservatório {config.id}</CardTitle>
+              <CardTitle className="text-lg font-bold capitalize">Reservatório {config.id === 'superior' ? 'Superior' : 'Inferior'}</CardTitle>
               <CardDescription>Ajuste as dimensões e limites de alerta</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">

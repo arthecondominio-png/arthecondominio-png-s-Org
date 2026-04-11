@@ -35,7 +35,7 @@ export default function App() {
           </div>
           <div>
             <h1 className="text-lg font-black tracking-tight text-slate-800 leading-none">Arthe</h1>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Smart Reservoir</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Reservatório Inteligente</p>
           </div>
         </div>
 
