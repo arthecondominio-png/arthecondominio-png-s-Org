@@ -29,7 +29,7 @@ const TankCard: React.FC<TankCardProps> = ({ title, deviceId, config, latestRead
   
   const lastUpdate = latestReading ? new Date(latestReading.created_at) : null;
   const minutesSinceLastUpdate = lastUpdate ? differenceInMinutes(now, lastUpdate) : Infinity;
-  const isOffline = minutesSinceLastUpdate > 5;
+  const isOffline = minutesSinceLastUpdate > 40;
 
   const getStatusColor = (status: string, offline: boolean) => {
     if (offline) return 'bg-slate-500 text-white';
@@ -165,13 +165,43 @@ export const Dashboard: React.FC = () => {
   const inferiorConfig = configs.find(c => c.id === 'inferior') || null;
 
   const anomalyStatus = React.useMemo(() => {
-    if (allReadings.length < 10) return null;
+    const anomalies = [];
+    const now = new Date();
+
+    // 0. Offline Detection (Both devices)
+    const devices = [
+      { id: 'caixa_01', name: 'Superior' },
+      { id: 'caixa_02', name: 'Inferior' }
+    ];
+
+    devices.forEach(dev => {
+      const devReadings = allReadings.filter(r => r.device_id === dev.id);
+      if (devReadings.length > 0) {
+        const latest = devReadings[0];
+        const diff = differenceInMinutes(now, new Date(latest.created_at));
+        if (diff > 40) {
+          anomalies.push({
+            type: 'OFFLINE',
+            message: `O dispositivo ${dev.name} está offline há ${diff} minutos. Verifique a conexão ou energia no local.`,
+            severity: 'high'
+          });
+        }
+      } else if (allReadings.length > 0) {
+        anomalies.push({
+          type: 'OFFLINE',
+          message: `Nenhum dado recebido do dispositivo ${dev.name}.`,
+          severity: 'high'
+        });
+      }
+    });
+
+    if (allReadings.length < 10) return anomalies.length > 0 ? anomalies : null;
 
     const superiorHistory = allReadings
       .filter(r => r.device_id === 'caixa_01')
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
-    if (superiorHistory.length < 5) return null;
+    if (superiorHistory.length < 5) return anomalies.length > 0 ? anomalies : null;
 
     // 1. Detect if pump is currently running
     const last = superiorHistory[superiorHistory.length - 1];
@@ -221,7 +251,6 @@ export const Dashboard: React.FC = () => {
     threeHoursAgo.setHours(threeHoursAgo.getHours() - 3);
     const recentActivations = events.length; // This is simplified, ideally we'd filter events by time
     
-    const anomalies = [];
     if (isRising && currentRunDuration > maxNormalDuration) {
       anomalies.push({
         type: 'DURATION',
@@ -381,7 +410,9 @@ export const Dashboard: React.FC = () => {
                 <div className={`p-2 rounded-xl ${
                   anomaly.severity === 'high' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'
                 }`}>
-                  {anomaly.type === 'DURATION' ? <Clock className="w-5 h-5" /> : <Activity className="w-5 h-5" />}
+                  {anomaly.type === 'DURATION' ? <Clock className="w-5 h-5" /> : 
+                   anomaly.type === 'OFFLINE' ? <WifiOff className="w-5 h-5" /> :
+                   <Activity className="w-5 h-5" />}
                 </div>
                 <div className="flex-1">
                   <h4 className="text-sm font-black uppercase tracking-tight">
