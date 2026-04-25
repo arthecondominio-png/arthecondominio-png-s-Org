@@ -6,12 +6,11 @@
 import * as React from 'react';
 import { Dashboard } from './components/Dashboard.tsx';
 import { HistoryView } from './components/HistoryView.tsx';
-import { SettingsView } from './components/SettingsView.tsx';
 import { Toaster } from './components/ui/sonner.tsx';
-import { LayoutDashboard, History, Settings, Droplets, Menu, X } from 'lucide-react';
+import { LayoutDashboard, History, Droplets, Menu, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-type View = 'dashboard' | 'history' | 'settings';
+type View = 'dashboard' | 'history';
 
 export default function App() {
   const [currentView, setCurrentView] = React.useState<View>('dashboard');
@@ -20,7 +19,6 @@ export default function App() {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'history', label: 'Histórico', icon: History },
-    { id: 'settings', label: 'Configurações', icon: Settings },
   ];
 
   return (
@@ -106,7 +104,6 @@ export default function App() {
         >
           {currentView === 'dashboard' && <Dashboard />}
           {currentView === 'history' && <HistoryView />}
-          {currentView === 'settings' && <SettingsView />}
         </motion.div>
       </main>
 

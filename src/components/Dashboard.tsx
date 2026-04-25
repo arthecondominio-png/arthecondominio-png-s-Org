@@ -13,17 +13,10 @@ interface TankCardProps {
   deviceId: string;
   config: Configuracao | null;
   latestReading: NivelLeitura | null;
+  now: Date;
 }
 
-const TankCard: React.FC<TankCardProps> = ({ title, deviceId, config, latestReading }) => {
-  const [now, setNow] = React.useState(new Date());
-  
-  // Update 'now' every minute to refresh offline status
-  React.useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 60000);
-    return () => clearInterval(timer);
-  }, []);
-
+const TankCard: React.FC<TankCardProps> = ({ title, deviceId, config, latestReading, now }) => {
   const percent = latestReading?.percentual ?? 0;
   const status = latestReading?.status ?? 'DESCONHECIDO';
   
@@ -158,6 +151,13 @@ export const Dashboard: React.FC = () => {
   const [allReadings, setAllReadings] = React.useState<NivelLeitura[]>([]); // For anomaly detection
   const [configs, setConfigs] = React.useState<Configuracao[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [now, setNow] = React.useState(new Date());
+
+  // Update 'now' every minute to refresh offline status globally
+  React.useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30000); // Check every 30s
+    return () => clearInterval(timer);
+  }, []);
 
   const superiorReading = readings.find(r => r.device_id === 'caixa_01') || null;
   const inferiorReading = readings.find(r => r.device_id === 'caixa_02') || null;
@@ -166,7 +166,6 @@ export const Dashboard: React.FC = () => {
 
   const anomalyStatus = React.useMemo(() => {
     const anomalies = [];
-    const now = new Date();
 
     // 0. Offline Detection (Both devices)
     const devices = [
@@ -178,7 +177,9 @@ export const Dashboard: React.FC = () => {
       const devReadings = allReadings.filter(r => r.device_id === dev.id);
       if (devReadings.length > 0) {
         const latest = devReadings[0];
-        const diff = differenceInMinutes(now, new Date(latest.created_at));
+        const lastUpdateDate = new Date(latest.created_at);
+        const diff = differenceInMinutes(now, lastUpdateDate);
+        
         if (diff > 40) {
           anomalies.push({
             type: 'OFFLINE',
@@ -275,7 +276,7 @@ export const Dashboard: React.FC = () => {
     }
 
     return anomalies;
-  }, [allReadings]);
+  }, [allReadings, now]);
 
   React.useEffect(() => {
     const fetchData = async () => {
@@ -382,12 +383,14 @@ export const Dashboard: React.FC = () => {
           deviceId="caixa_01" 
           config={superiorConfig}
           latestReading={superiorReading}
+          now={now}
         />
         <TankCard 
           title="Reservatório Inferior" 
           deviceId="caixa_02" 
           config={inferiorConfig}
           latestReading={inferiorReading}
+          now={now}
         />
       </div>
 
