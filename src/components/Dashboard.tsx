@@ -21,7 +21,9 @@ const TankCard: React.FC<TankCardProps> = ({ title, deviceId, config, latestRead
   const status = latestReading?.status ?? 'DESCONHECIDO';
   
   const lastUpdate = latestReading ? new Date(latestReading.created_at) : null;
-  const minutesSinceLastUpdate = lastUpdate ? differenceInMinutes(now, lastUpdate) : Infinity;
+  const minutesSinceLastUpdate = lastUpdate 
+    ? Math.floor(Math.abs(now.getTime() - lastUpdate.getTime()) / (1000 * 60)) 
+    : Infinity;
   const isOffline = minutesSinceLastUpdate > 40;
 
   const getStatusColor = (status: string, offline: boolean) => {
@@ -159,8 +161,8 @@ export const Dashboard: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  const superiorReading = readings.find(r => r.device_id === 'caixa_01') || null;
-  const inferiorReading = readings.find(r => r.device_id === 'caixa_02') || null;
+  const superiorReading = readings.find(r => r.device_id?.toLowerCase() === 'caixa_01') || null;
+  const inferiorReading = readings.find(r => r.device_id?.toLowerCase() === 'caixa_02') || null;
   const superiorConfig = configs.find(c => c.id === 'superior') || null;
   const inferiorConfig = configs.find(c => c.id === 'inferior') || null;
 
@@ -174,11 +176,12 @@ export const Dashboard: React.FC = () => {
     ];
 
     devices.forEach(dev => {
-      const devReadings = allReadings.filter(r => r.device_id === dev.id);
+      const devReadings = allReadings.filter(r => r.device_id?.toLowerCase() === dev.id);
       if (devReadings.length > 0) {
         const latest = devReadings[0];
         const lastUpdateDate = new Date(latest.created_at);
-        const diff = differenceInMinutes(now, lastUpdateDate);
+        // Ensure comparison is consistent regardless of timezone by using timestamp milliseconds
+        const diff = Math.floor(Math.abs(now.getTime() - lastUpdateDate.getTime()) / (1000 * 60));
         
         if (diff > 40) {
           anomalies.push({
@@ -294,7 +297,7 @@ export const Dashboard: React.FC = () => {
 
         // Group by device_id and take the first one for current status
         const uniqueReadings = latestReadings?.reduce((acc: NivelLeitura[], current) => {
-          const x = acc.find(item => item.device_id === current.device_id);
+          const x = acc.find(item => item.device_id?.toLowerCase() === current.device_id?.toLowerCase());
           if (!x) return acc.concat([current]);
           else return acc;
         }, []) || [];
@@ -356,6 +359,18 @@ export const Dashboard: React.FC = () => {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  const totalToday = React.useMemo(() => {
+    const today = new Date();
+    return allReadings.filter(r => {
+      const readingDate = new Date(r.created_at);
+      return readingDate.getDate() === today.getDate() &&
+             readingDate.getMonth() === today.getMonth() &&
+             readingDate.getFullYear() === today.getFullYear();
+    }).length;
+  }, [allReadings]);
+
+  const isAnyOffline = anomalyStatus?.some(a => a.type === 'OFFLINE');
 
   if (loading) {
     return (
@@ -439,12 +454,14 @@ export const Dashboard: React.FC = () => {
           <div className="flex flex-wrap gap-4 items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-green-500" />
-                <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Sistema Online</span>
+                <div className={`w-3 h-3 rounded-full ${isAnyOffline ? 'bg-amber-500' : 'bg-green-500'}`} />
+                <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                  {isAnyOffline ? 'Atenção: Equipamento Offline' : 'Sistema Online'}
+                </span>
               </div>
               <div className="h-4 w-[1px] bg-slate-200" />
               <div className="text-xs font-medium text-slate-500">
-                Total de leituras hoje: <span className="font-bold text-slate-800">--</span>
+                Total de leituras hoje: <span className="font-bold text-slate-800">{totalToday}</span>
               </div>
             </div>
             
